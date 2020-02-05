@@ -20,7 +20,6 @@
         var playerPointer = -1;
         var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         var abQueue = [];
-        var staticAudio = [];
         var token = "";
         var tokenTime = 0;
         var cheapVoice = "";
@@ -157,7 +156,7 @@
                 if (paras[i] != "") //not blank
                 {
                     if (defaultVoice.indexOf("zh-CN") == -1) {
-                        let findChinese = new RegExp(/(([0-9（“《\u4E00-\u9FA5\uFE30-\uFFA0]+[，。？！”…》）\n]*)+)/gim);
+                        let findChinese = new RegExp(/(([（“《\u4E00-\u9FA5\uFE30-\uFFA0]+[0-9（“《\u4E00-\u9FA5\uFE30-\uFFA0]+[，。？！”…》）\n]*)+)/gim);
                         while (findChinese.exec(paras[i]) != null) {
                             paras[i] = paras[i].replace(findChinese, "<voice name='" + $("#zh_CN > option:nth-child(1)").val() + "'>$1</voice>");
                             break;
@@ -180,20 +179,42 @@
             }
 
             paras.forEach((element, index) => {
-                element = element.replace(/<voice/gm, "<a");
-                element = element.replace(/<\/voice>/gm, "</a>");
-                let thistext = "<html><body><div>" + element + "</div></body></html>", xmlDoc = $.parseHTML(thistext), $xml = $(xmlDoc);
-                $xml.contents().filter(function () { return this.nodeType === 3; }).wrap('<a name=\"' + defaultVoice + '\"></a>');
-                let tmpStr = $xml.html();
-                tmpStr = tmpStr.replace(/<a name="[A-z\- ]*?">([\s]*?)<\/a>/gm, "$1");
-                tmpStr = tmpStr.replace(/<a /gm, "<voice ");
-                tmpStr = tmpStr.replace(/<\/a>/gm, "</voice>");
-                paras[index] = tmpStr;
+                if (element != "") {
+                    element = element.replace(/<voice/gm, "<a");
+                    element = element.replace(/<\/voice>/gm, "</a>");
+                    let thistext = "<html><body><div>" + element + "</div></body></html>", xmlDoc = $.parseHTML(thistext), $xml = $(xmlDoc);
+                    $xml.contents().filter(function () { return this.nodeType === 3; }).wrap('<a name=\"' + defaultVoice + '\"></a>');
+                    let tmpStr = $xml.html();
+                    tmpStr = tmpStr.replace(/<a name="[A-z\- ]*?">([\s]*?)<\/a>/gm, "$1");
+                    tmpStr = tmpStr.replace(/<a /gm, "<voice ");
+                    tmpStr = tmpStr.replace(/<\/a>/gm, "</voice>");
+                    paras[index] = tmpStr;
+                }
             });
 
             if (pre != undefined)  //For the express-as tag
             {
                 return paras;
+            }
+
+            if (text.indexOf("<audio src=") != -1) {
+                paras.forEach((element, index) => {
+                    element = element.replace(/"><\/audio>/gmi, "\"/>");
+                    let findAudio = new RegExp(/<audio src="[\s\S]+"\/>/gmi);
+                    let result, insertCount = 0, tmpStr = element;
+                    while ((result = findAudio.exec(element)) != null) {
+                        tmpStr = insertTxt(tmpStr, result.index + insertCount * ("||".length), "||");
+                        insertCount++;
+                        tmpStr = insertTxt(tmpStr, findAudio.lastIndex + insertCount * ("||".length), "||");
+                        insertCount++;
+                    }
+                    tmpStr = tmpStr.replace(/\|\|([\s]+)\|\|/gm, "$1||");
+                    let tmpPara = tmpStr.split("||");
+
+                    tmpPara.unshift(index, 1);
+                    Array.prototype.splice.apply(paras, tmpPara);
+
+                });
             }
 
             paras.forEach((element, index) => {
@@ -300,10 +321,12 @@
             }
 
             paras.forEach(element => {
-                if (element.indexOf("mstts") == -1) {
-                    reqQueue.push("<speak version=\"1.0\" xmlns=\"https://www.w3.org/2001/10/synthesis\" xml:lang=\"en-US\">" + element + "</speak>");
-                } else {
-                    reqQueue.push("<speak version=\"1.0\" xmlns=\"https://www.w3.org/2001/10/synthesis\" xmlns:mstts=\"https://www.w3.org/2001/mstts\" xml:lang=\"en-US\">" + element + "</speak>");
+                if (element.trim() != "") {
+                    if (element.indexOf("mstts") == -1) {
+                        reqQueue.push("<speak version=\"1.0\" xmlns=\"https://www.w3.org/2001/10/synthesis\" xml:lang=\"en-US\">" + element + "</speak>");
+                    } else {
+                        reqQueue.push("<speak version=\"1.0\" xmlns=\"https://www.w3.org/2001/10/synthesis\" xmlns:mstts=\"https://www.w3.org/2001/mstts\" xml:lang=\"en-US\">" + element + "</speak>");
+                    }
                 }
             });
 
@@ -320,6 +343,13 @@
                 reqQueue[index] = element.replace(/"/gm, "&quot;");
                 reqQueue[index] = element.replace(/	/gm, " ");
             });
+
+            for (let index = 0; index < reqQueue.length; index++) {
+                if (reqQueue[index].trim() == "") {
+                    reqQueue.splice(index, 1);
+                    index--;
+                }
+            }
 
             for (let i = 0; i < reqQueue.length; i++) {  //Rewrite JSON to reuse audio
                 if (reqQueue[i].indexOf("<speak") != -1) {
@@ -340,9 +370,24 @@
                 console.log("Sending requests to the server.");
                 for (let i = 0; i < reqQueue.length; i++) {
                     console.log("Requesting line " + i + "...");
-                    if (reqQueue[i].indexOf("\"audio\"") != -1) {
-                        console.log("Using prefetched static audio.");
-                        audioQueue.push(staticAudio[0]); //there is only one staticAudio for now ;)
+                    if (reqQueue[i].indexOf("<audio src=") != -1) {
+                        let findAudio = new RegExp(/<audio src="([\s\S]+)"\/>/gmi);
+                        let result = findAudio.exec(reqQueue[i]);
+                        console.log("Loading external audio file: " + result[1]);
+                        await fetch(result[1]).then(res => {
+                            if (res.ok) {
+                                return res.blob();
+                            } else {
+                                throw new Error(res.statusText);
+                            }
+                        }).then(resblob => {
+                            if (resblob != undefined) {
+                                console.log("Audio #" + i + " received.");
+                                audioQueue.push(URL.createObjectURL(resblob));
+                            }
+                        }).catch(reason => {
+                            console.log("Unable to load audio file: " + result[1] + ", " + reason);
+                        });
                     } else if (reqQueue[i].indexOf("\"repeatLine\"") != -1) { //Reuse audio for same content
                         let thisjson = JSON.parse(reqQueue[i]);
                         audioQueue.push(audioQueue[Number(thisjson.repeatLine)]);
@@ -440,32 +485,6 @@
 
         }
 
-        /*         async function getStaticAudio() {
-                    let json = "{ \"audio\" : \"dingdong\" }";
-                    try {
-                        const res = await fetch(serverPrefix + 'speak.php', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            },
-                            body: json
-                        }); //Returns a Response obj, needs func to convert to text.
-                        if (res.ok) {
-                            const restext = await res.text();
-                            if (restext.indexOf("data:audio") != -1) {
-                                console.log("Static audio received.");
-                                staticAudio.push(restext);
-                            } else {
-                                throw new Error("Unexpected response from the server: " + restext);
-                            }
-                        } else {
-                            throw new Error('HTTP error, status = ' + res.status);
-                        }
-                    } catch (error) {
-                        alert("An error occured when retrieving static audio: \n" + error);
-                    }
-                }
-         */
         async function joinAudio() {
             var ttlLength = 0;
             var sr;
@@ -554,7 +573,7 @@
     &nbsp;&nbsp; <div style="display: none;"> Rate: <input type="range" id="speed" min="0.25" max="4.0" step="0.01">
         <input type="text" id="speedtxt"></div>
     <br>
-    <button id="insertAudio" disabled>Insert SE</button> <button id="insertPause">Insert Pause</button>
+    <button id="insertAudio">Insert audio file</button> <button id="insertPause">Insert Pause</button>
     <div id="showOnSelect"><button id="insertRepeat">Insert repeat</button> <button id="changevoice">Change
             voice</button>
         <button id="dlgmaker">Dialog Maker</button> <!-- <button id="insertEmph">Insert emphasis</button> --> <button
@@ -594,13 +613,15 @@
             <option value="sentiment">Sentiment</option>
         </select><br><button id="dlgok4">OK</button> <button id="dlgcancel4">Cancel</button>
     </div>
+    <div id="insertaudiofiledlg" style="display: none;">Insert audio file: <br /> <input type="text" id="audiourl"
+            placeholder="Enter URL to the audio file. e.g.: http://example.com/a.mp3 or file://D:/a.mp3" size="100">
+        <br><button id="dlgok5">OK</button> <button id="dlgcancel5">Cancel</button></div>
 
     <script type="text/javascript">
         $(document).ready(function () {
             getToken().then(ok => {
                 if (ok) getVoices();
             }).catch(e => { });
-            // getStaticAudio();
             //Submit button state change
             $("#sub").attr("disabled", "true");
             $("#sub").click(function () {
@@ -693,7 +714,7 @@
                     $("#showOnSelect").css("display", "none");
                 }
 
-             }, 100);
+            }, 100);
         });
         $("#saveit").attr("disabled", "true");  //saveit button state change
         $("#saveit").click(() => {
@@ -738,9 +759,6 @@
         });
 
 
-        $("#insertAudio").click(function () {
-            insertText("\n<audiofile src='dingdong'>\n");
-        });
         $("#insertPause").click(() => {
             let pause = window.prompt("Pause for how long?" + "\n" + "e.g.:2s", "2s");
             if (pause != "" && pause != null) {
@@ -975,6 +993,19 @@
             $("#expressstyle-j").css("display", "none");
             $("#expressstyle-x").css("display", "none");
             $("#expressdlg").css("display", "none");
+        });
+
+        $("#insertAudio").click(function () {
+            $("#insertaudiofiledlg").css("display", "inline");
+            $("#audiourl").focus();
+        });
+        $("#dlgok5").click(() => {
+            let url = $("#audiourl").val();
+            if (url != "") insertText("<audio src=\"" + url + "\"/>");
+            $("#dlgcancel5").click();
+        });
+        $("#dlgcancel5").click(() => {
+            $("#insertaudiofiledlg").css("display", "none");
         });
     </script>
 </body>
