@@ -17,7 +17,7 @@ Microsoft uses deep neural networks, to create a Text to Speech service makes th
 1. Clone this repo. 
 2. Follow the guide in the "Getting started" section of [Microsoft Azure Text to Speech](https://azure.microsoft.com/en-us/services/cognitive-services/text-to-speech/) and obtain your subscription key. Be sure to choose a region that supports neural voices.
 3. Edit the HTML file, search for `YOUR_SUBSCRIPTION_KEY` and replace it with your subscription key.
-4. Find `YOUR_REGION` and replace it with the region you've chosen.
+4. Find `YOUR_REGION` and replace it with the region you've chosen, e.g.: `westus` for West US.
 5. Enjoy!
 
 This project uses [Microsoft Azure Services](https://azure.microsoft.com/en-us/services/cognitive-services/text-to-speech/), [jQuery](https://www.jquery.com/), [audiobuffer-to-wav.js](https://github.com/Jam3/audiobuffer-to-wav).
