@@ -1025,7 +1025,7 @@
                         let thisfile = file[0].files[0];
                         let id = staticAudio.push(URL.createObjectURL(thisfile)) - 1;
                         insertText("<audio id=\"" + id + "\"/>");
-                        $("#audiolist").prepend("<label><input type='radio' name='a' id='audios' value='" + id + "' selected>  " + thisfile.name + "  <button onclick='new Audio(staticAudio[" + id + "]).play()'>Play</button></label><br />");
+                        $("#audiolist").prepend("<label><input type='radio' name='a' id='audios' value='" + id + "' checked>  " + thisfile.name + "  <button onclick='new Audio(staticAudio[" + id + "]).play()'>Play</button></label><br />");
                         $("#dlgcancel5").click();
                     }
                     break;
