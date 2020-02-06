@@ -25,15 +25,6 @@
         var cheapVoice = "";
         var staticAudio = [];
 
-        function isChinese(str) {
-            var patrn = /[\u4E00-\u9FA5]|[\uFE30-\uFFA0]/gi;
-            if (!patrn.exec(str)) {
-                return false;
-            } else {
-                return true;
-            }
-        }
-
         function insertText(str) {  //Insert text at the cursor in a textarea
             let obj = $("#t").get(0);
             if (document.selection) {
@@ -157,7 +148,7 @@
                 if (paras[i] != "") //not blank
                 {
                     if (defaultVoice.indexOf("zh-CN") == -1) {
-                        let findChinese = new RegExp(/(([（“《\u4E00-\u9FA5\uFE30-\uFFA0]+[0-9（“《\u4E00-\u9FA5\uFE30-\uFFA0]+[，。？！”…》）\n]*)+)/gim);
+                        let findChinese = new RegExp(/(([0-9（“《\u4E00-\u9FA5\uFE30-\uFFA0]+[（“《\u4E00-\u9FA5\uFE30-\uFFA0]+[0-9（“《\u4E00-\u9FA5\uFE30-\uFFA0]+[，。？！”…》）\n]*)+)/gim);
                         while (findChinese.exec(paras[i]) != null) {
                             paras[i] = paras[i].replace(findChinese, "<voice name='" + $("#zh_CN > option:nth-child(1)").val() + "'>$1</voice>");
                             break;
@@ -184,7 +175,7 @@
                     element = element.replace(/<voice/gm, "<a");
                     element = element.replace(/<\/voice>/gm, "</a>");
                     let thistext = "<html><body><div>" + element + "</div></body></html>", xmlDoc = $.parseHTML(thistext), $xml = $(xmlDoc);
-                    $xml.contents().filter(function () { return this.nodeType === 3; }).wrap('<a name=\"' + defaultVoice + '\"></a>');
+                    $xml.contents().filter(function () { return this.nodeType == 3 || this.nodeName.toLowerCase() != "a"; }).wrap('<a name=\"' + defaultVoice + '\"></a>');
                     let tmpStr = $xml.html();
                     tmpStr = tmpStr.replace(/<a name="[A-z\- ]*?">([\s]*?)<\/a>/gm, "$1");
                     tmpStr = tmpStr.replace(/<a /gm, "<voice ");
@@ -192,6 +183,22 @@
                     paras[index] = tmpStr;
                 }
             });
+
+            for (let index = 0; index < paras.length; index++) {
+                const element = paras[index];
+                const $xml = $("<xml>" + element + "</xml>");
+                do {
+                    var letscont = false;
+                    $xml.find("voice").each(function () {
+                        if ($(this).attr("name") == $(this).next().attr("name")) {
+                            $(this).append($(this).next().html());
+                            $(this).next().remove();
+                            letscont = true;
+                        }
+                    });
+                } while (letscont);
+                paras[index]=$xml.html();
+            }
 
             if (pre != undefined)  //For the express-as tag
             {
@@ -755,7 +762,7 @@
             try { player.pause(); } catch (e) { }
 
         });
-        $("#t").bind("input", ()=>$("#t").change());
+        $("#t").bind("input", () => $("#t").change());
         $("#voice").change(function () {
             $("#t").change();
         });
@@ -940,7 +947,10 @@
         $("#dlgok3").click(() => {
             let rate = $("#rate").val();
             let pitch = $("#pitch").val();
-            wrapText("<prosody" + Number(rate) != 1 ? (" rate=\"" + Number(rate) + "\"") : "" + Number(pitch) != 0 ? (" pitch=\"" + (Number(pitch) > 0 ? "\+" + pitch : pitch) + "st\">") : "", "</prosody>");
+            let tmpStr = "";
+            if (Number(rate) != 1) tmpStr += " rate=\"" + rate + "\"";
+            if (Number(pitch) != 0) tmpStr += " pitch=\"" + (Number(pitch) > 0 ? "\+" + pitch : pitch) + "st\"";
+            wrapText("<prosody" + tmpStr + ">", "</prosody>");
             $("#dlgcancel3").click();
         });
         $("#dlgcancel3").click(() => {
